@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import logging
-
 import flask
 import flask_cors
 
@@ -14,11 +12,10 @@ from . import toolkit
 from .lib import mirroring
 from .lib import signals
 
-from .app import app
+from .app import app  # noqa
 
 
 store = storage.load()
-logger = logging.getLogger(__name__)
 
 """Those routes are loaded only when `standalone' is enabled in the config
    file. The goal is to make the Registry working without the central Index

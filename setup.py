@@ -6,27 +6,42 @@ try:
 except ImportError:
     import distutils.core as setuptools
 
+import os
+import re
 import sys
 
+ver = sys.version_info
+
 # XXX as ugly as this looks, namespaces break terribly otherwise
-# import docker_registry.lib as lib
-execfile('./docker_registry/server/__init__.py')
+filename = './docker_registry/server/__init__.py'
+exec(compile(open(filename, 'rb').read(), filename, 'exec'))
 
 requirements_txt = open('./requirements/main.txt')
 requirements = [line for line in requirements_txt]
 
-ver = sys.version_info
-
-if ver[0] == 2:
+if ver < (3, 0):
     # Python 2 requires lzma backport
     requirements.insert(0, 'backports.lzma>=0.0.2')
-    if ver[1] <= 6:
+    if ver < (2, 7):
         # Python 2.6 requires additional libraries
         requirements.insert(0, 'argparse>=1.2.1')
         requirements.insert(0, 'importlib>=1.0.3')
 
+# Using this will relax dependencies to semver major matching
+if 'DEPS' in os.environ and os.environ['DEPS'].lower() == 'loose':
+    loose = []
+    for item in requirements:
+        d = re.match(r'([^=]+)==([0-9]+)[.]([0-9]+)[.]([0-9]+)', item)
+        if d:
+            d = list(d.groups())
+            name = d.pop(0)
+            version = d.pop(0)
+            item = '%s>=%s,<%s' % (name, int(version), int(version) + 1)
+        loose.insert(0, item)
+    requirements = loose
+
 # Require core (the reason this is out of req.txt is to ease tox)
-requirements.insert(0, 'docker-registry-core>=1,<2')
+requirements.insert(0, 'docker-registry-core>=2,<3')
 
 # Explicit packages list to avoid setup_tools funkyness
 packages = ['docker_registry',
@@ -79,6 +94,7 @@ setuptools.setup(
     install_requires=requirements,
     tests_require=open('./requirements/test.txt').read(),
     extras_require={
-        'bugsnag': ['bugsnag==2.0.1']
+        'bugsnag': ['bugsnag>=2.0,<2.1'],
+        'newrelic': ['newrelic>=2.22,<2.23'],
     }
 )

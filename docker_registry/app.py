@@ -3,6 +3,7 @@
 import logging
 import logging.handlers
 import os
+import sys
 
 try:
     import bugsnag
@@ -10,26 +11,55 @@ try:
 except ImportError as e:
     _bugsnag_import_error = e
     bugsnag = None
-import flask
 
 from . import toolkit
 from .lib import config
 from .server import __version__
+import flask
+
+# configure logging prior to subsequent imports which assume
+# logging has been configured
+cfg = config.load()
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',
+                    level=getattr(logging, cfg.loglevel.upper()),
+                    datefmt="%d/%b/%Y:%H:%M:%S %z")
+
+from .lib import mirroring  # noqa
 
 app = flask.Flask('docker-registry')
-cfg = config.load()
-loglevel = getattr(logging, cfg.get('loglevel', 'INFO').upper())
-logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',
-                    level=loglevel)
 
 
 @app.route('/_ping')
 @app.route('/v1/_ping')
 def ping():
-    headers = {'X-Docker-Registry-Standalone': cfg.standalone is not False}
-    if cfg.mirroring:
+    headers = {'X-Docker-Registry-Standalone': cfg.standalone is True}
+    if mirroring.is_mirror():
         headers['X-Docker-Registry-Standalone'] = 'mirror'
     return toolkit.response(headers=headers)
+
+
+@app.route('/_versions')
+@app.route('/v1/_versions')
+def versions():
+    """Return a JSON object ({"package-name": "package-version", ...}).
+
+    This is an unofficial endpoint for debugging your docker-registry
+    install.  If you're running a publicly-accessible endpoint, it's
+    probably best to disable this endpoint to avoid leaking
+    implementation details.
+    """
+    versions = {}
+    if cfg.debug_versions:
+        for name, module in sys.modules.items():
+            if name.startswith('_'):
+                continue
+            try:
+                version = module.__version__
+            except AttributeError:
+                continue
+            versions[name] = version
+        versions['python'] = sys.version
+    return toolkit.response(versions)
 
 
 @app.route('/')
@@ -48,20 +78,20 @@ def after_request(response):
 def init():
     # Configure the email exceptions
     info = cfg.email_exceptions
-    if info and 'smtp_host' in info:
-        mailhost = info['smtp_host']
-        mailport = info.get('smtp_port')
+    if info and info.smtp_host:
+        mailhost = info.smtp_host
+        mailport = info.smtp_port
         if mailport:
             mailhost = (mailhost, mailport)
-        smtp_secure = info.get('smtp_secure', None)
+        smtp_secure = info.smtp_secure
         secure_args = _adapt_smtp_secure(smtp_secure)
         mail_handler = logging.handlers.SMTPHandler(
             mailhost=mailhost,
-            fromaddr=info['from_addr'],
-            toaddrs=[info['to_addr']],
+            fromaddr=info.from_addr,
+            toaddrs=[info.to_addr],
             subject='Docker registry exception',
-            credentials=(info['smtp_login'],
-                         info['smtp_password']),
+            credentials=(info.smtp_login,
+                         info.smtp_password),
             secure=secure_args)
         mail_handler.setLevel(logging.ERROR)
         app.logger.addHandler(mail_handler)
@@ -91,9 +121,9 @@ def _adapt_smtp_secure(value):
     if isinstance(value, basestring):
         # a string - wrap it in the tuple
         return (value,)
-    if isinstance(value, dict):
+    if isinstance(value, config.Config):
         assert set(value.keys()) <= set(['keyfile', 'certfile'])
-        return (value['keyfile'], value.get('certfile', None))
+        return (value.keyfile, value.certfile)
     if value:
         return ()
 

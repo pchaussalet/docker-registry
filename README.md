@@ -1,7 +1,7 @@
 Docker-Registry
 ===============
 
-[![Build Status](https://travis-ci.org/dotcloud/docker-registry.png)](https://travis-ci.org/dotcloud/docker-registry)
+[![Build Status](https://travis-ci.org/docker/docker-registry.png)](https://travis-ci.org/docker/docker-registry)
 
 About this document
 ===================
@@ -11,7 +11,7 @@ As the documentation evolves with different registry versions, be sure that befo
  * check which version of the registry you are running
  * switch to the corresponding tag to access the README that matches your product version
 
-The stable, released version is currently the [0.7.0 tag](https://github.com/dotcloud/docker-registry/tree/0.7.0).
+The stable, released version is currently the [0.8.0 tag](https://github.com/docker/docker-registry/tree/0.8.0).
 
 
 Quick start
@@ -19,11 +19,11 @@ Quick start
 
 The fastest way to get running:
 
- * install docker according to the [following instructions](http://docs.docker.io/installation/#installation)
+ * install docker according to the [following instructions](https://docs.docker.com/installation/#installation)
  * run the registry: `docker run -p 5000:5000 registry`
 
 That will use the
-[official image from the Docker index](https://index.docker.io/_/registry/).
+[official image from the Docker index](https://registry.hub.docker.com/_/registry/).
 
 Here is another example that will launch a container on port 5000, and store images in an Amazon S3 bucket:  
 ```
@@ -149,6 +149,7 @@ When using the `config_sample.yml`, you can pass all options through as environm
 1. `loglevel`: string, level of debugging. Any of python's
    [logging](http://docs.python.org/2/library/logging.html) module levels:
    `debug`, `info`, `warn`, `error` or `critical`
+1. `debug_versions`: boolean, enable the `/_versions` endpoint for debugging.
 1. `storage_redirect`: Redirect resource requested if storage engine supports
    this, e.g. S3 will redirect signed URLs, this can be used to offload the
    server.
@@ -209,7 +210,6 @@ returns empty results.
    Currently supported backends are:
    1. `sqlalchemy`
 
-
 If `search_backend` is neither empty nor one of the supported backends, it
 should point to a module.
 
@@ -222,7 +222,10 @@ common:
 
 #### sqlalchemy
 
-1. `sqlalchemy_index_database`: The database URL
+Use [SQLAlchemy][] as the search backend.
+
+1. `sqlalchemy_index_database`: The database URL passed through to
+   [create_engine][].
 
 Example:
 
@@ -231,7 +234,6 @@ common:
   search_backend: sqlalchemy
   sqlalchemy_index_database: sqlite:////tmp/docker-registry.db
 ```
-
 
 In this case, the module is imported, and an instance of it's `Index`
 class is used as the search backend.
@@ -252,7 +254,7 @@ common:
   mirroring:
     source: https://registry-1.docker.io
     source_index: https://index.docker.io
-    tags_cache_ttl: 864000 # 10 days
+    tags_cache_ttl: 172800 # 2 days
 ```
 
 ### Cache options
@@ -405,10 +407,10 @@ Then install the Registry app:
 sudo pip install docker-registry
 ```
 
-If you need extra requirements, like bugsnag, specify them:
+If you need extra requirements, like bugsnag, or new-relic specify them:
 
 ```
-sudo pip install docker-registry[bugsnag]
+sudo pip install docker-registry[bugsnag,newrelic]
 ```
 
 
@@ -428,7 +430,7 @@ should not require the additional repositories.
 Then install the Registry app:
 
 ```
-sudo python-pip install docker-registry[bugsnag]
+sudo python-pip install docker-registry[bugsnag,newrelic]
 ```
 
 (or clone the repository and `pip install .`)
@@ -436,31 +438,25 @@ sudo python-pip install docker-registry[bugsnag]
 #### Run it
 
 ```
-gunicorn --access-logfile - --debug -k gevent -b 0.0.0.0:5000 -w 1 docker_registry.wsgi:application
+docker-registry
 ```
 
 ### How do I setup user accounts?
 
-The first time someone tries to push to your registry, it will prompt
-them for a username, password, and email.
+The standalone registry does not provide account management. For simple
+access control, you can set up an nginx or Apache frontend with basic
+auth enabled (see `contrib/` for examples).
 
 ### What about a Production environment?
 
 The recommended setting to run the Registry in a prod environment is gunicorn
 behind a nginx server which supports chunked transfer-encoding (nginx >= 1.3.9).
 
-You could use for instance supervisord to spawn the registry with 8 workers
-using this command:
-
-```
-gunicorn -k gevent --max-requests 100 --graceful-timeout 3600 -t 3600 -b localhost:5000 -w 8 docker_registry.wsgi:application
-```
-
 #### nginx
 
-[Here is an nginx configuration file example.](https://github.com/dotcloud/docker-registry/blob/master/contrib/nginx.conf), which applies to versions < 1.3.9 which are compiled with the [HttpChunkinModule](http://wiki.nginx.org/HttpChunkinModule). 
+[Here is an nginx configuration file example.](https://github.com/docker/docker-registry/blob/master/contrib/nginx.conf), which applies to versions < 1.3.9 which are compiled with the [HttpChunkinModule](http://wiki.nginx.org/HttpChunkinModule). 
 
-[This is another example nginx configuration file](https://github.com/dotcloud/docker-registry/blob/master/contrib/nginx_1-3-9.conf) that applies to versions of nginx greater than 1.3.9 that have support for the chunked_transfer_encoding directive.
+[This is another example nginx configuration file](https://github.com/docker/docker-registry/blob/master/contrib/nginx_1-3-9.conf) that applies to versions of nginx greater than 1.3.9 that have support for the chunked_transfer_encoding directive.
 
 And you might want to add
 [Basic auth on Nginx](http://wiki.nginx.org/HttpAuthBasicModule) to protect it
@@ -479,18 +475,26 @@ requests to the Docker Registry:
   ProxyPassReverse   /  http://localhost:5000/
 ```
 
+#### Advanced start options (NOT recommended)
 
-#### dotCloud
-
-The central Registry runs on the dotCloud platform:
+If you want greater control over gunicorn:
 
 ```
-cd docker-registry/
-dotcloud create myregistry
-dotcloud push
+gunicorn -c contrib/gunicorn.py docker_registry.wsgi:application
+```
+
+or even bare
+
+```
+gunicorn --access-logfile - --error-logfile - -k gevent -b 0.0.0.0:5000 -w 4 --max-requests 100 docker_registry.wsgi:application
 ```
 
 For developers
 --------------
 
 Read CONTRIBUTE.md
+
+[search-endpoint]: http://docs.docker.com/reference/api/docker-io_api/#search
+[SQLAlchemy]: http://docs.sqlalchemy.org/
+[create_engine]:
+  http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine

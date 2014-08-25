@@ -3,11 +3,14 @@
 import docker_registry.run as run
 
 import hashlib
+import os
 import random
 import string
 import unittest
 
 from docker_registry.core import compat
+
+data_dir = os.path.join(os.path.dirname(__file__), "data")
 
 
 class TestCase(unittest.TestCase):
@@ -74,5 +77,5 @@ class TestCase(unittest.TestCase):
         resp = self.http_client.get('/v1/images/{0}/json'.format(image_id))
         self.assertEqual(resp.status_code, 200, resp.data)
         self.assertEqual(resp.headers.get('x-docker-size'), str(len(layer)))
-        self.assertEqual(resp.headers['x-docker-payload-checksum'],
+        self.assertEqual(resp.headers['x-docker-checksum-payload'],
                          layer_checksum)

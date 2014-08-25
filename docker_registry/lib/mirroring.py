@@ -1,23 +1,21 @@
 # -*- coding: utf-8 -*-
 
-import flask
 import functools
 import logging
-import requests
 
 from .. import storage
 from .. import toolkit
 from . import cache
 from . import config
+import flask
+import requests
 
-
-DEFAULT_CACHE_TAGS_TTL = 48 * 3600
 logger = logging.getLogger(__name__)
+cfg = config.load()
 
 
 def is_mirror():
-    cfg = config.load()
-    return bool(cfg.get('mirroring', False))
+    return bool(cfg.mirroring and cfg.mirroring.source)
 
 
 def _response_headers(base):
@@ -34,11 +32,9 @@ def _response_headers(base):
 
 def lookup_source(path, stream=False, source=None):
     if not source:
-        cfg = config.load()
-        mirroring_cfg = cfg.mirroring
-        if not mirroring_cfg:
+        if not is_mirror():
             return
-        source = cfg.mirroring['source']
+        source = cfg.mirroring.source
     source_url = '{0}{1}'.format(source, path)
     headers = {}
     for k, v in flask.request.headers.iteritems():
@@ -67,14 +63,12 @@ def lookup_source(path, stream=False, source=None):
 def source_lookup_tag(f):
     @functools.wraps(f)
     def wrapper(namespace, repository, *args, **kwargs):
-        cfg = config.load()
         mirroring_cfg = cfg.mirroring
         resp = f(namespace, repository, *args, **kwargs)
-        if not mirroring_cfg:
+        if not is_mirror():
             return resp
-        source = mirroring_cfg['source']
-        tags_cache_ttl = mirroring_cfg.get('tags_cache_ttl',
-                                           DEFAULT_CACHE_TAGS_TTL)
+        source = mirroring_cfg.source
+        tags_cache_ttl = mirroring_cfg.tags_cache_ttl
 
         if resp.status_code != 404:
             logger.debug('Status code is not 404, no source '
@@ -105,9 +99,16 @@ def source_lookup_tag(f):
             # client GETs a single tag
             tag_path = store.tag_path(namespace, repository, kwargs['tag'])
 
-        data = cache.redis_conn.get('{0}:{1}'.format(
-            cache.cache_prefix, tag_path
-        ))
+        try:
+            data = cache.redis_conn.get('{0}:{1}'.format(
+                cache.cache_prefix, tag_path
+            ))
+        except cache.redis.exceptions.ConnectionError as e:
+            data = None
+            logger.warning("Diff queue: Redis connection error: {0}".format(
+                e
+            ))
+
         if data is not None:
             return toolkit.response(data=data, raw=True)
         source_resp = lookup_source(
@@ -117,9 +118,15 @@ def source_lookup_tag(f):
             return resp
         data = source_resp.content
         headers = _response_headers(source_resp.headers)
-        cache.redis_conn.setex('{0}:{1}'.format(
-            cache.cache_prefix, tag_path
-        ), tags_cache_ttl, data)
+        try:
+            cache.redis_conn.setex('{0}:{1}'.format(
+                cache.cache_prefix, tag_path
+            ), tags_cache_ttl, data)
+        except cache.redis.exceptions.ConnectionError as e:
+            logger.warning("Diff queue: Redis connection error: {0}".format(
+                e
+            ))
+
         return toolkit.response(data=data, headers=headers,
                                 raw=True)
     return wrapper
@@ -129,14 +136,13 @@ def source_lookup(cache=False, stream=False, index_route=False):
     def decorator(f):
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
-            cfg = config.load()
             mirroring_cfg = cfg.mirroring
             resp = f(*args, **kwargs)
-            if not mirroring_cfg:
+            if not is_mirror():
                 return resp
-            source = mirroring_cfg['source']
-            if index_route:
-                source = mirroring_cfg.get('source_index', source)
+            source = mirroring_cfg.source
+            if index_route and mirroring_cfg.source_index:
+                source = mirroring_cfg.source_index
             logger.debug('Source provided, registry acts as mirror')
             if resp.status_code != 404:
                 logger.debug('Status code is not 404, no source '
@@ -189,7 +195,7 @@ def _handle_mirrored_layer(source_resp, layer_path, store, headers):
         tmp.seek(0)
         store.stream_write(layer_path, tmp)
         tmp.close()
-    return flask.Response(generate(), headers=headers)
+    return flask.Response(generate(), headers=dict(headers))
 
 
 def store_mirrored_data(data, endpoint, args, store):

@@ -1,5 +1,40 @@
 # Docker-registry
 
+## 0.9.0-dev
+
+ * "loose" dependencies mechanism (DEPS=loose environment var will let you install without strictly versioned dependencies)
+ * enhanced python version compatibility
+ * enhanced style checking
+ * enhanced testing
+ * uniformized various gunicorn start stances
+ 
+
+## 0.8.0
+
+ * configuration rehaul: https://github.com/docker/docker-registry/pull/444 - beware this breaks API for the drivers, and the core package has been updated accordingly to denote that
+ * better redis error handling
+ * improved coverage
+ * experimental (undocumented) new-relic bundle support
+ * bugsnag and new-relic are now installable as setup-tools "extras"
+ * centralized version and other meta-informations
+ * port / host and other gunicorn options are more consistent
+ * mirroring fixes
+ * tarfile: pax header and xattr support
+ * some dependency requirements loosen (extras, test and style requirements)
+
+## 0.7.3
+
+ * [BUGFIX] fixed default value for standalone to true
+
+## 0.7.2
+
+ * [BUGFIX] fixed configuration handling on standalone mode
+
+## 0.7.1
+
+ * [BUGFIX] storage_path is now handled correctly to the filesystem storage driver
+ * [BUGFIX] change standalone header when in mirroring mode (prevents client from sending basic auth headers and overwriting token)
+
 ## 0.7
 
 Major architecture rehaul, with potentially breaking changes:

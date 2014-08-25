@@ -3,7 +3,6 @@
 import datetime
 import functools
 import logging
-import tarfile
 import time
 
 import flask
@@ -20,6 +19,9 @@ from .lib import cache
 from .lib import checksums
 from .lib import layers
 from .lib import mirroring
+# this is our monkey patched snippet from python v2.7.6 'tarfile'
+# with xattr support
+from .lib.xtarfile import tarfile
 
 
 store = storage.load()
@@ -125,7 +127,7 @@ def _get_image_json(image_id, headers=None):
         pass
     try:
         csums = load_checksums(image_id)
-        headers['X-Docker-Payload-Checksum'] = csums
+        headers['X-Docker-Checksum-Payload'] = csums
     except exceptions.FileNotFoundError:
         pass
     return toolkit.response(data, headers=headers, raw=True)
@@ -289,8 +291,7 @@ def put_image_checksum(image_id):
     # Checksum is ok, we remove the marker
     store.remove(mark_path)
     # We trigger a task on the diff worker if it's running
-    if cache.redis_conn:
-        layers.diff_queue.push(image_id)
+    layers.enqueue_diff(image_id)
     return toolkit.response()
 
 
@@ -344,7 +345,7 @@ def get_image_ancestry(image_id, headers):
 
 
 def check_images_list(image_id):
-    if cfg.disable_token_auth is True or cfg.standalone is not False:
+    if cfg.disable_token_auth is True or cfg.standalone is True:
         # We enforce the check only when auth is enabled so we have a token.
         return True
     repository = toolkit.get_repository()
@@ -382,6 +383,7 @@ def load_checksums(image_id):
 @app.route('/v1/images/<image_id>/json', methods=['PUT'])
 @toolkit.requires_auth
 def put_image_json(image_id):
+    data = None
     try:
         # Note(dmp): unicode patch
         data = json.loads(flask.request.data.decode('utf8'))

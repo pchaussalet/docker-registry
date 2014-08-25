@@ -41,8 +41,9 @@ logger = logging.getLogger(__name__)
 
 class Base(object):
 
-    """Storage is a convenience class that describes methods that must be
-    implemented by any backend.
+    """Storage is a convenience class...
+
+    ... that describes methods that must be implemented by any backend.
     You should inherit (or duck type) this if you are implementing your own.
 
     :param host: host name
@@ -157,79 +158,58 @@ class Base(object):
         return self.put_content(path, content)
 
     def get_content(self, path):
-        """Method to get content
-        """
+        """Method to get content."""
         raise NotImplementedError(
             "You must implement get_content(self, path) on your storage %s" %
             self.__class__.__name__)
 
     def put_content(self, path, content):
-        """Method to put content
-        """
+        """Method to put content."""
         raise NotImplementedError(
             "You must implement put_content(self, path, content) on %s" %
             self.__class__.__name__)
 
     def stream_read(self, path, bytes_range=None):
-        """Method to stream read
-        """
+        """Method to stream read."""
         raise NotImplementedError(
             "You must implement stream_read(self, path, , bytes_range=None) " +
             "on your storage %s" %
             self.__class__.__name__)
 
     def stream_write(self, path, fp):
-        """Method to stream write
-        """
+        """Method to stream write."""
         raise NotImplementedError(
             "You must implement stream_write(self, path, fp) " +
             "on your storage %s" %
             self.__class__.__name__)
 
     def list_directory(self, path=None):
-        """Method to list directory
-        """
+        """Method to list directory."""
         raise NotImplementedError(
             "You must implement list_directory(self, path=None) " +
             "on your storage %s" %
             self.__class__.__name__)
 
     def exists(self, path):
-        """Method to test exists
-        """
+        """Method to test exists."""
         raise NotImplementedError(
             "You must implement exists(self, path) on your storage %s" %
             self.__class__.__name__)
 
     def remove(self, path):
-        """Method to remove
-        """
+        """Method to remove."""
         raise NotImplementedError(
             "You must implement remove(self, path) on your storage %s" %
             self.__class__.__name__)
 
     def get_size(self, path):
-        """Method to get the size
-        """
+        """Method to get the size."""
         raise NotImplementedError(
             "You must implement get_size(self, path) on your storage %s" %
             self.__class__.__name__)
 
 
 def fetch(name):
-    """The only public method you should access if you are not implementing
-    your own driver. - use this to get a backend
-    instance to which you can delegate actual requests.
-
-    :param host: host name
-    :type host: unicode
-    :param port: port number
-    :type port: int
-    :param basepath: base path (will be prepended to actual requests)
-    :type basepath: unicode
-    :returns: a docker connection instance usable for the requested scheme
-    :rtype: DockerConnection
-    """
     try:
         # XXX The noqa below is because of hacking being non-sensical on this
         module = __import__('docker_registry.drivers.%s' % name, globals(),

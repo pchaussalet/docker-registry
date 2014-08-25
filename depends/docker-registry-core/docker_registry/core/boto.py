@@ -37,7 +37,6 @@ import tempfile
 
 from . import driver
 from . import lru
-
 from .exceptions import FileNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -129,14 +128,14 @@ class Base(driver.Base):
 
     def __init__(self, path=None, config=None):
         self._config = config
-        self._root_path = config.get('storage_path', '/test')
+        self._root_path = path or '/test'
         self._boto_conn = self.makeConnection()
         self._boto_bucket = self._boto_conn.get_bucket(
             self._config.boto_bucket)
         logger.info("Boto based storage initialized")
 
     def _build_connection_params(self):
-        kwargs = {'is_secure': (self._config.boto_secure is True)}
+        kwargs = {'is_secure': (self._config.s3_secure is True)}
         config_args = [
             'host', 'port', 'debug',
             'proxy', 'proxy_port',
